@@ -119,7 +119,6 @@ header h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
       <div class="k">State</div>           <div class="v" id="stState">—</div>
       <div class="k">Started at</div>      <div class="v" id="stStarted">—</div>
       <div class="k">Public address</div>  <div class="v ip" id="stPublic">—</div>
-      <div class="k">LAN address</div>     <div class="v ip" id="stLan">—</div>
       <div class="k">Tailscale</div>       <div class="v ip" id="stTs">—</div>
       <div class="k">World password</div>  <div class="v"><code>dragon4</code></div>
       <div class="k">Players online</div>  <div class="v"><div id="players" class="players"></div></div>
@@ -243,7 +242,6 @@ async function refreshStatus() {
       : '<span style="color:var(--red); font-weight:600;">● Stopped</span>';
     $("stStarted").textContent = s.active ? formatTimeAgo(s.started_at) + "  (" + (s.started_at || "") + ")" : "—";
     $("stPublic").innerHTML = `<code>${s.public_ip || "?"}:${s.external_port}</code>`;
-    $("stLan").innerHTML = `<code>${s.lan_ip}:${s.internal_port}</code>`;
     $("stTs").innerHTML = `<code>${s.tailscale_ip}:${s.internal_port}</code>`;
 
     const players = $("players");
