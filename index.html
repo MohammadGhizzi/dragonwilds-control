@@ -143,6 +143,15 @@ header h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
   </div>
 
   <div class="card">
+    <h2>Hardware</h2>
+    <div class="kv">
+      <div class="k">Load (1m / 5m / 15m)</div> <div class="v" id="hwLoad">—</div>
+      <div class="k">Memory</div>                <div class="v" id="hwMem">—</div>
+      <div class="k">Temperatures</div>          <div class="v"><div id="hwTemps" class="players"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Backups (last 14)</h2>
     <div id="backups" class="kv" style="grid-template-columns: 1fr auto; gap: 4px 16px;">—</div>
   </div>
@@ -233,6 +242,17 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+function prettifyTempLabel(s) {
+  // Compress noisy labels: "k10temp: Tctl" -> "CPU", "amdgpu: edge" -> "GPU", etc.
+  if (/k10temp|coretemp/i.test(s)) return "CPU";
+  if (/amdgpu/i.test(s)) return "GPU";
+  if (/nvme/i.test(s)) return "SSD";
+  if (/wifi|mt7921|iwlwifi/i.test(s)) return "WiFi";
+  if (/acpitz/i.test(s)) return "ACPI";
+  if (/BAT/i.test(s)) return "Battery";
+  return s.replace(/^[^:]+:\s*/, "").replace(/_/g, " ");
+}
+
 async function refreshStatus() {
   try {
     const s = await api("/api/status");
@@ -249,6 +269,31 @@ async function refreshStatus() {
       players.innerHTML = s.active_players.map(n => `<span class="pill">${escapeHtml(n)}</span>`).join("");
     } else {
       players.innerHTML = '<span class="empty">no recent players</span>';
+    }
+
+    // Hardware
+    if (s.load) $("hwLoad").textContent = s.load.map(n => n.toFixed(2)).join("  /  ");
+    if (s.memory && s.memory.total_mb) {
+      const m = s.memory;
+      $("hwMem").textContent = `${(m.used_pct).toFixed(1)}%  ·  ${((m.total_mb - m.avail_mb)/1024).toFixed(1)} / ${(m.total_mb/1024).toFixed(1)} GB used`;
+    }
+    const tempsEl = $("hwTemps");
+    if (s.temps && s.temps.length) {
+      // pick the most interesting ones — show CPU/GPU/SSD by label keywords
+      const interesting = s.temps.filter(t =>
+        /k10temp|coretemp|cpu|amdgpu|gpu|nvme|composite/i.test(t.label)
+      );
+      const list = (interesting.length ? interesting : s.temps).slice(0, 8);
+      tempsEl.innerHTML = list.map(t => {
+        const c = t.c;
+        let color = "var(--green)";
+        if (c >= 75) color = "var(--red)";
+        else if (c >= 65) color = "var(--yellow)";
+        else if (c >= 55) color = "var(--blue)";
+        return `<span class="pill" title="${escapeHtml(t.label)}"><span style="color:${color}; font-weight:700;">${c.toFixed(1)}°C</span> ${escapeHtml(prettifyTempLabel(t.label))}</span>`;
+      }).join("");
+    } else {
+      tempsEl.innerHTML = '<span class="empty">no sensors</span>';
     }
 
     const bk = $("backups");
