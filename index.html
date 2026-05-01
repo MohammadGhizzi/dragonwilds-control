@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>Dragonwilds Control</title>
+<style>
+:root {
+  --bg: #0b0e14;
+  --panel: #131822;
+  --panel-2: #1a2030;
+  --border: #232b3d;
+  --text: #d8dce6;
+  --muted: #8a93a6;
+  --accent: #ff8a3d;
+  --green: #44d07b;
+  --red: #ef5d5d;
+  --yellow: #f1c84e;
+  --blue: #5d9bef;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+a { color: var(--accent); }
+button { font: inherit; cursor: pointer; }
+input { font: inherit; }
+
+.container { max-width: 980px; margin: 0 auto; padding: 24px 20px 64px; }
+header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 20px; }
+header h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
+.brand { display:flex; align-items:center; gap:10px; }
+.brand .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); box-shadow: 0 0 0 3px rgba(255,255,255,0.04); }
+.brand .dot.up   { background: var(--green); box-shadow: 0 0 0 3px rgba(68,208,123,0.18); }
+.brand .dot.down { background: var(--red);   box-shadow: 0 0 0 3px rgba(239,93,93,0.18); }
+.btn-secondary { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; font-size: 12px; }
+.btn-secondary:hover { color: var(--text); border-color: #344056; }
+
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 14px; }
+.card h2 { margin: 0 0 12px; font-size: 14px; color: var(--muted); font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; }
+
+.kv { display:grid; grid-template-columns: 160px 1fr; gap: 6px 14px; font-size: 14px; }
+.kv .k { color: var(--muted); }
+.kv .v { font-variant-numeric: tabular-nums; }
+.kv .v code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+.kv .v.ip { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+.controls { display:flex; flex-wrap:wrap; gap: 8px; margin-top: 4px; }
+.btn { padding: 9px 14px; border-radius: 7px; border: 1px solid transparent; font-weight: 600; font-size: 13px; transition: filter 120ms; }
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+.btn-start   { background: #1f8a4d; color: white; }
+.btn-stop    { background: #b13434; color: white; }
+.btn-restart { background: #b97a1a; color: white; }
+.btn-backup  { background: #2c5da6; color: white; }
+
+.players { display:flex; flex-wrap:wrap; gap: 6px; min-height: 24px; }
+.players .pill { padding: 3px 10px; border-radius: 20px; background: var(--panel-2); border:1px solid var(--border); font-size: 12.5px; }
+.players .empty { color: var(--muted); font-style: italic; }
+
+.logs-wrap { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
+.logs-wrap .meta { color: var(--muted); font-size: 12px; }
+.logs { background: #06080d; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; height: 360px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.45; white-space: pre; }
+.logs .ln { display:block; }
+.logs .ln.warn  { color: #f6c75d; }
+.logs .ln.error { color: #ff8a8a; }
+.logs .ln.net   { color: #7cc5f8; }
+.logs .ln.save  { color: #a2e9a2; }
+
+.toast { position: fixed; right: 16px; bottom: 16px; background: var(--panel-2); border: 1px solid var(--border); padding: 10px 14px; border-radius: 8px; font-size: 13px; color: var(--text); box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+.toast.ok    { border-color: #2c6f44; }
+.toast.err   { border-color: #823636; }
+
+.login { max-width: 380px; margin: 14vh auto 0; }
+.login .card { padding: 26px 24px; }
+.login h1 { font-size: 22px; margin: 0 0 4px; }
+.login p  { color: var(--muted); margin: 0 0 18px; }
+.login label { display:block; margin: 12px 0 6px; color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.5px; }
+.login input { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.login input:focus { outline: none; border-color: var(--accent); }
+.login .btn-primary { width: 100%; background: var(--accent); color: #1a1208; border: none; padding: 11px 14px; border-radius: 8px; font-weight: 700; margin-top: 14px; }
+.login .err { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+
+@media (max-width: 600px) {
+  .kv { grid-template-columns: 1fr; gap: 0; }
+  .kv .k { margin-top: 8px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="login" class="login" hidden>
+  <div class="card">
+    <h1>🐉 Dragonwilds Control</h1>
+    <p>Enter the API URL and admin token.</p>
+    <label for="apiUrl">API URL</label>
+    <input id="apiUrl" type="url" placeholder="https://moha-eos.tailb7a05f.ts.net" autocomplete="off" />
+    <label for="token">Token</label>
+    <input id="token" type="password" placeholder="paste token from server" autocomplete="off" />
+    <button id="loginBtn" class="btn-primary">Sign in</button>
+    <div id="loginErr" class="err"></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="app" class="container" hidden>
+  <header>
+    <div class="brand">
+      <span id="statusDot" class="dot"></span>
+      <h1>Dragonwilds Control</h1>
+    </div>
+    <button id="logoutBtn" class="btn-secondary">Logout</button>
+  </header>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="kv">
+      <div class="k">State</div>           <div class="v" id="stState">—</div>
+      <div class="k">Started at</div>      <div class="v" id="stStarted">—</div>
+      <div class="k">Public address</div>  <div class="v ip" id="stPublic">—</div>
+      <div class="k">LAN address</div>     <div class="v ip" id="stLan">—</div>
+      <div class="k">Tailscale</div>       <div class="v ip" id="stTs">—</div>
+      <div class="k">World password</div>  <div class="v"><code>dragon4</code></div>
+      <div class="k">Players online</div>  <div class="v"><div id="players" class="players"></div></div>
+    </div>
+    <div class="controls" style="margin-top:14px;">
+      <button class="btn btn-start"   id="btnStart">▶ Start</button>
+      <button class="btn btn-stop"    id="btnStop">■ Stop</button>
+      <button class="btn btn-restart" id="btnRestart">↻ Restart</button>
+      <button class="btn btn-backup"  id="btnBackup">💾 Backup now</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="logs-wrap">
+      <h2 style="margin:0;">Recent log</h2>
+      <div class="meta">
+        auto-refresh
+        <label style="margin-left:8px; user-select:none;"><input type="checkbox" id="autoRefresh" checked /> on</label>
+      </div>
+    </div>
+    <div id="logs" class="logs">loading…</div>
+  </div>
+
+  <div class="card">
+    <h2>Backups (last 14)</h2>
+    <div id="backups" class="kv" style="grid-template-columns: 1fr auto; gap: 4px 16px;">—</div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script>
+"use strict";
+
+const LS_API = "dwctl.api";
+const LS_TOK = "dwctl.token";
+
+const $ = (id) => document.getElementById(id);
+let state = { polling: null, logsPolling: null };
+
+function getCfg() {
+  return {
+    api: localStorage.getItem(LS_API) || "",
+    token: localStorage.getItem(LS_TOK) || "",
+  };
+}
+
+function setCfg(api, token) {
+  localStorage.setItem(LS_API, api);
+  localStorage.setItem(LS_TOK, token);
+}
+
+function clearCfg() {
+  localStorage.removeItem(LS_API);
+  localStorage.removeItem(LS_TOK);
+}
+
+async function api(path, opts={}) {
+  const cfg = getCfg();
+  const url = cfg.api.replace(/\/+$/, "") + path;
+  const r = await fetch(url, {
+    ...opts,
+    headers: {
+      "Authorization": "Bearer " + cfg.token,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+  let body = null;
+  try { body = await r.json(); } catch {}
+  if (!r.ok) {
+    const err = body && body.error ? body.error : `HTTP ${r.status}`;
+    throw new Error(err);
+  }
+  return body;
+}
+
+function toast(msg, kind="ok", ms=2500) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast " + kind;
+  t.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.hidden = true, ms);
+}
+
+function formatTimeAgo(stampStr) {
+  if (!stampStr) return "—";
+  // systemd format: "Sat 2026-05-02 02:07:11 +03"
+  const m = stampStr.match(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+  if (!m) return stampStr;
+  const t = new Date(m[1].replace(" ", "T") + "Z").getTime();
+  if (!t) return stampStr;
+  const now = Date.now();
+  const diff = Math.max(0, now - t) / 1000;
+  if (diff < 60) return Math.floor(diff) + "s ago";
+  if (diff < 3600) return Math.floor(diff/60) + "m ago";
+  if (diff < 86400) return Math.floor(diff/3600) + "h ago";
+  return Math.floor(diff/86400) + "d ago";
+}
+
+function colorizeLogLine(line) {
+  let cls = "ln";
+  if (/Error|FAILED|Fatal/i.test(line)) cls += " error";
+  else if (/Warning|WARN/i.test(line)) cls += " warn";
+  else if (/NotifyAccepting|Join (request|succeeded|failed)|UNetConnection/.test(line)) cls += " net";
+  else if (/SaveGame|Save completed|Backup/.test(line)) cls += " save";
+  return `<span class="${cls}">${escapeHtml(line)}</span>`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function refreshStatus() {
+  try {
+    const s = await api("/api/status");
+    $("statusDot").className = "dot " + (s.active ? "up" : "down");
+    $("stState").innerHTML = s.active
+      ? '<span style="color:var(--green); font-weight:600;">● Running</span>'
+      : '<span style="color:var(--red); font-weight:600;">● Stopped</span>';
+    $("stStarted").textContent = s.active ? formatTimeAgo(s.started_at) + "  (" + (s.started_at || "") + ")" : "—";
+    $("stPublic").innerHTML = `<code>${s.public_ip || "?"}:${s.external_port}</code>`;
+    $("stLan").innerHTML = `<code>${s.lan_ip}:${s.internal_port}</code>`;
+    $("stTs").innerHTML = `<code>${s.tailscale_ip}:${s.internal_port}</code>`;
+
+    const players = $("players");
+    if (s.active_players && s.active_players.length) {
+      players.innerHTML = s.active_players.map(n => `<span class="pill">${escapeHtml(n)}</span>`).join("");
+    } else {
+      players.innerHTML = '<span class="empty">no recent players</span>';
+    }
+
+    const bk = $("backups");
+    if (s.backups && s.backups.length) {
+      bk.innerHTML = s.backups.map(b => {
+        const sz = (b.size / 1024).toFixed(1) + " KB";
+        const dt = new Date(b.mtime * 1000).toISOString().replace("T", " ").slice(0, 19);
+        return `<div>${escapeHtml(b.name)}</div><div style="color:var(--muted)">${sz} · ${dt}</div>`;
+      }).join("");
+    } else {
+      bk.innerHTML = '<div style="color:var(--muted)">no backups yet</div>';
+    }
+  } catch (e) {
+    if (/401|unauthor/i.test(e.message)) {
+      logout();
+      toast("session expired — sign in again", "err");
+    } else {
+      toast("status: " + e.message, "err");
+    }
+  }
+}
+
+async function refreshLogs() {
+  try {
+    const r = await api("/api/logs?n=200");
+    const html = r.lines.map(colorizeLogLine).join("\n");
+    const el = $("logs");
+    const wasAtBottom = (el.scrollTop + el.clientHeight) >= (el.scrollHeight - 20);
+    el.innerHTML = html;
+    if (wasAtBottom) el.scrollTop = el.scrollHeight;
+  } catch (e) {
+    if (/401|unauthor/i.test(e.message)) { logout(); return; }
+    $("logs").textContent = "(error: " + e.message + ")";
+  }
+}
+
+async function action(name, btn) {
+  btn.disabled = true;
+  try {
+    const path = "/api/" + name;
+    const r = await api(path, { method: "POST", body: "{}" });
+    if (r.ok) {
+      toast(`${name} ✓`, "ok");
+    } else {
+      toast(`${name}: ${r.error || "failed"}`, "err");
+    }
+  } catch (e) {
+    toast(`${name}: ${e.message}`, "err");
+  } finally {
+    btn.disabled = false;
+    setTimeout(refreshStatus, 700);
+  }
+}
+
+function startPolling() {
+  refreshStatus();
+  refreshLogs();
+  state.polling = setInterval(refreshStatus, 5000);
+  state.logsPolling = setInterval(() => { if ($("autoRefresh").checked) refreshLogs(); }, 4000);
+}
+
+function stopPolling() {
+  clearInterval(state.polling);
+  clearInterval(state.logsPolling);
+  state.polling = state.logsPolling = null;
+}
+
+function logout() {
+  stopPolling();
+  clearCfg();
+  $("app").hidden = true;
+  $("login").hidden = false;
+  $("token").value = "";
+  $("loginErr").textContent = "";
+}
+
+async function tryLogin() {
+  const apiUrl = $("apiUrl").value.trim().replace(/\/+$/, "");
+  const token = $("token").value.trim();
+  $("loginErr").textContent = "";
+  if (!apiUrl || !token) { $("loginErr").textContent = "URL and token required"; return; }
+  setCfg(apiUrl, token);
+  try {
+    await api("/api/status");
+    $("login").hidden = true;
+    $("app").hidden = false;
+    startPolling();
+  } catch (e) {
+    $("loginErr").textContent = "login failed: " + e.message;
+    clearCfg();
+  }
+}
+
+// wire up
+window.addEventListener("DOMContentLoaded", () => {
+  $("loginBtn").addEventListener("click", tryLogin);
+  $("token").addEventListener("keydown", e => { if (e.key === "Enter") tryLogin(); });
+  $("apiUrl").addEventListener("keydown", e => { if (e.key === "Enter") $("token").focus(); });
+  $("logoutBtn").addEventListener("click", logout);
+  $("btnStart").addEventListener("click", e => action("start", e.target));
+  $("btnStop").addEventListener("click", e => {
+    if (confirm("Stop the server? Connected players will be disconnected.")) action("stop", e.target);
+  });
+  $("btnRestart").addEventListener("click", e => {
+    if (confirm("Restart the server? Connected players will be disconnected for ~30s.")) action("restart", e.target);
+  });
+  $("btnBackup").addEventListener("click", e => action("backup", e.target));
+
+  const cfg = getCfg();
+  if (cfg.api && cfg.token) {
+    $("apiUrl").value = cfg.api;
+    api("/api/status").then(() => {
+      $("login").hidden = true;
+      $("app").hidden = false;
+      startPolling();
+    }).catch(() => {
+      $("login").hidden = false;
+      $("app").hidden = true;
+    });
+  } else {
+    $("login").hidden = false;
+  }
+});
+</script>
+</body>
+</html>
