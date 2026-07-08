@@ -45,6 +45,10 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background
 .field label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
 .field .name{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:#dce6f3;overflow:hidden;text-overflow:ellipsis}
 .field .desc{color:var(--muted);font-size:12px;margin-top:6px;min-height:17px}
+.help-text{color:#b7c4d5;font-size:12px;line-height:1.42;margin-top:7px}
+.help-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.tag{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:2px 7px;color:var(--muted);font-size:11px;background:rgba(255,255,255,.025)}
+.tag.warn{border-color:#6f5920;color:#ffdd79}.tag.net{border-color:#31557b;color:#9fd2ff}.tag.restart{border-color:#5e4d7a;color:#d8c8ff}.tag.sec{border-color:#713232;color:#ffaaaa}.tag.perf{border-color:#244d34;color:#a7efbf}
 .field input:not([type=checkbox]),.field select,.field textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 9px;min-width:0}
 .field textarea{height:70px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .checkrow{display:flex;align-items:center;gap:8px;padding:7px 0}
@@ -86,6 +90,126 @@ async function req(path, opts={}){
   return data;
 }
 function tempClass(c){return c>=75?'hot':c>=65?'warn':c>=55?'mid':'ok'}
+
+const SETTING_HELP = {
+  Difficulty:{text:'Preset name from Palworld. On dedicated servers, None is the normal default/custom ruleset; the real difficulty comes from the individual rate sliders below.',tags:['restart']},
+  RandomizerType:{text:'Changes how Pal spawns are randomized. Use carefully because randomizer changes can make the world feel very different.',tags:['restart','warn']},
+  RandomizerSeed:{text:'Seed used by the randomizer. Same seed plus same randomizer mode should give consistent randomized results.',tags:['restart']},
+  bIsRandomizerPalLevelRandom:{text:'When enabled, randomized Pals can also get randomized levels. This can make early areas unexpectedly dangerous.',tags:['restart','warn']},
+  DayTimeSpeedRate:{text:'Multiplier for how fast daytime passes. Higher means shorter days; lower means longer days.',tags:['restart']},
+  NightTimeSpeedRate:{text:'Multiplier for how fast nighttime passes. Higher means shorter nights; lower means longer nights.',tags:['restart']},
+  ExpRate:{text:'Multiplier for player and Pal experience gain. Higher makes leveling faster; lower makes progression slower.',tags:['restart']},
+  PalCaptureRate:{text:'Multiplier for capture chance. Higher makes spheres more forgiving; lower makes capturing harder.',tags:['restart']},
+  PalSpawnNumRate:{text:'Multiplier for wild Pal spawn density. Raising it can make the world feel alive, but it is one of the settings most likely to increase CPU/network load.',tags:['restart','performance']},
+  PalDamageRateAttack:{text:'Damage dealt by Pals. Raise for harder wild Pal/base combat; lower if enemies feel too punishing.',tags:['restart']},
+  PalDamageRateDefense:{text:'Damage Pals receive. Higher means Pals take more damage; lower makes them tankier.',tags:['restart']},
+  PlayerDamageRateAttack:{text:'Damage dealt by players. Higher makes weapons/attacks stronger; lower makes fights longer.',tags:['restart']},
+  PlayerDamageRateDefense:{text:'Damage players receive. Higher makes players more fragile; lower makes players tankier.',tags:['restart']},
+  DeathPenalty:{text:'What players drop on death. All is the harshest; None removes death drops.',tags:['restart','warn']},
+  bHardcore:{text:'Hardcore death behavior. This can permanently punish death, so do not enable casually on a shared server.',tags:['restart','warn']},
+  bPalLost:{text:'Makes Pals lost on death. Very punishing; treat as hard-mode/permadeath style.',tags:['restart','warn']},
+  bCharacterRecreateInHardcore:{text:'Allows creating a new character after hardcore death instead of being fully locked out.',tags:['restart','warn']},
+  bEnablePlayerToPlayerDamage:{text:'Allows players to damage each other. Keep off for normal co-op.',tags:['restart']},
+  bEnableFriendlyFire:{text:'Allows friendly fire. Can cause accidental damage in co-op.',tags:['restart']},
+  bIsPvP:{text:'Turns on PvP world behavior. Leave off for a friends-only co-op server unless everyone wants PvP.',tags:['restart']},
+  PlayerStomachDecreaceRate:{text:'Player hunger drain multiplier. Higher drains food faster; lower makes survival easier.',tags:['restart']},
+  PlayerStaminaDecreaceRate:{text:'Player stamina drain multiplier for sprinting, climbing, etc. Higher feels harsher; lower feels smoother.',tags:['restart']},
+  PlayerAutoHPRegeneRate:{text:'Player passive HP regeneration multiplier while awake.',tags:['restart']},
+  PlayerAutoHpRegeneRateInSleep:{text:'Player HP regeneration multiplier while sleeping.',tags:['restart']},
+  PalStomachDecreaceRate:{text:'Pal hunger drain multiplier. Higher means base Pals need food more often.',tags:['restart']},
+  PalStaminaDecreaceRate:{text:'Pal stamina drain multiplier. Affects how quickly Pals tire from actions such as flying or combat.',tags:['restart']},
+  PalAutoHPRegeneRate:{text:'Pal passive HP regeneration multiplier while active.',tags:['restart']},
+  PalAutoHpRegeneRateInSleep:{text:'Pal HP regeneration multiplier while resting/sleeping or recovering.',tags:['restart']},
+  BuildObjectHpRate:{text:'Building health multiplier. Higher makes bases harder to destroy.',tags:['restart']},
+  BuildObjectDamageRate:{text:'Damage applied to buildings. Higher makes structures break faster when attacked.',tags:['restart']},
+  BuildObjectDeteriorationDamageRate:{text:'Base decay/deterioration speed. Lower reduces decay; 0 usually means no deterioration damage.',tags:['restart']},
+  CollectionDropRate:{text:'Amount of resources gained from gathering. Higher speeds up farming; lower slows progression.',tags:['restart']},
+  CollectionObjectHpRate:{text:'Health of gatherable objects like trees and rocks. Higher means more hits before breaking.',tags:['restart']},
+  CollectionObjectRespawnSpeedRate:{text:'Respawn timing for gatherable objects. Changing this affects how quickly resources return.',tags:['restart']},
+  EnemyDropItemRate:{text:'Quantity/rate of drops from defeated enemies. Higher gives more loot.',tags:['restart']},
+  DropItemMaxNum:{text:'Maximum loose dropped items in the world. Higher can reduce despawns but may hurt performance.',tags:['restart','performance']},
+  DropItemAliveMaxHours:{text:'How long dropped items stay before despawning. Higher is convenient but can increase world clutter.',tags:['restart','performance']},
+  ItemWeightRate:{text:'Item weight multiplier. Lower means players can carry more; higher makes inventory management harsher.',tags:['restart']},
+  ItemCorruptionMultiplier:{text:'Item corruption speed multiplier. Higher means items decay/corrupt faster if that system applies.',tags:['restart']},
+  EquipmentDurabilityDamageRate:{text:'How fast equipment loses durability. Lower is more relaxed; higher is harsher.',tags:['restart']},
+  BaseCampMaxNum:{text:'Total base camps allowed on the server. Higher allows more bases but more world simulation.',tags:['restart','performance']},
+  BaseCampWorkerMaxNum:{text:'Maximum worker Pals per base. This directly affects base simulation load; keep modest on the laptop.',tags:['restart','performance']},
+  BaseCampMaxNumInGuild:{text:'Maximum bases a guild can own. More bases means more persistent base activity.',tags:['restart','performance']},
+  MaxBuildingLimitNum:{text:'Building cap. 0 means unlimited; limiting can help prevent huge bases from hurting performance.',tags:['restart','performance']},
+  WorkSpeedRate:{text:'Multiplier for base work/crafting speed. Higher speeds up chores.',tags:['restart']},
+  GuildPlayerMaxNum:{text:'Maximum players in one guild. For your 4-player server, 4 is usually enough.',tags:['restart']},
+  GuildRejoinCooldownMinutes:{text:'Cooldown before a player can rejoin a guild, in minutes.',tags:['restart']},
+  bAutoResetGuildNoOnlinePlayers:{text:'Deletes/reset guild assets after no guild members log in for the configured time. Dangerous for friend servers unless everyone agrees.',tags:['restart','warn']},
+  AutoResetGuildTimeNoOnlinePlayers:{text:'Offline time before guild reset triggers when auto-reset is enabled.',tags:['restart','warn']},
+  PalEggDefaultHatchingTime:{text:'Base hatch time for huge eggs in hours; smaller eggs scale from it. Lower for less waiting.',tags:['restart']},
+  bEnableInvaderEnemy:{text:'Enables raids/invaders. Turning it off makes bases safer.',tags:['restart']},
+  bEnableFastTravel:{text:'Enables fast travel. Turn off only for challenge runs.',tags:['restart']},
+  bEnableFastTravelOnlyBaseCamp:{text:'Restricts fast travel so players can only fast travel from bases.',tags:['restart']},
+  bIsStartLocationSelectByMap:{text:'Lets new players choose their starting location from the map.',tags:['restart']},
+  bExistPlayerAfterLogout:{text:'Keeps logged-out characters in the world. More immersive, but can expose sleepers to danger depending on settings.',tags:['restart']},
+  SupplyDropSpan:{text:'Time between supply drop / meteor-style events, in minutes.',tags:['restart']},
+  EnablePredatorBossPal:{text:'Enables Predator Boss Pals. Can make the world more dangerous.',tags:['restart']},
+  ServerReplicatePawnCullDistance:{text:'Distance in centimeters where creatures/players are replicated to clients. Higher can reduce pop-in but costs more network/CPU.',tags:['restart','performance','network']},
+  ItemContainerForceMarkDirtyInterval:{text:'How often containers force a sync/update. Lower may feel more responsive but can increase server work.',tags:['restart','performance']},
+  ServerName:{text:'Name shown for the server.',tags:['restart']},
+  ServerDescription:{text:'Description shown for the server, mostly useful for listings or remembering the server purpose.',tags:['restart']},
+  AdminPassword:{text:'Admin password and REST API basic-auth password. Keep this private.',tags:['restart','security']},
+  ServerPassword:{text:'Password players use to join. Share only with friends.',tags:['restart','security']},
+  ServerPlayerMaxNum:{text:'Maximum players allowed by config. Startup players should match this; your target is 4.',tags:['restart']},
+  PublicIP:{text:'Public IP advertised by the server. Set this only when needed; wrong values can break external joining/listing.',tags:['restart','network']},
+  PublicPort:{text:'Public port advertised by the server. Must match router forwarding if used publicly.',tags:['restart','network']},
+  Region:{text:'Region label for server listing. It does not change routing by itself.',tags:['restart']},
+  bUseAuth:{text:'Uses Palworld authentication. Usually keep enabled.',tags:['restart','security']},
+  bAllowClientMod:{text:'Allows modded clients to join. Convenient for friends, but less strict than vanilla-only.',tags:['restart','security']},
+  CrossplayPlatforms:{text:'Platform allow-list such as Steam, Xbox, PS5, Mac. Removing a platform can block those players.',tags:['restart']},
+  BanListURL:{text:'Remote ban list URL used by Palworld.',tags:['restart','security']},
+  bShowPlayerList:{text:'Shows the player list in-game.',tags:['restart']},
+  ChatPostLimitPerMinute:{text:'Chat rate limit per player. Lower helps spam control.',tags:['restart']},
+  bIsShowJoinLeftMessage:{text:'Shows join/leave messages in chat/logs.',tags:['restart']},
+  DenyTechnologyList:{text:'List of technologies to disable. Use exact internal IDs; bad values may do nothing.',tags:['restart','warn']},
+  RCONEnabled:{text:'Remote console interface. Keep disabled unless you specifically need RCON and secure it.',tags:['restart','security']},
+  RCONPort:{text:'TCP port for RCON if enabled. Do not expose publicly without a strong reason.',tags:['restart','security','network']},
+  RESTAPIEnabled:{text:'Palworld local REST API. The control panel depends on it, but Docker binds it to localhost only.',tags:['restart','security']},
+  RESTAPIPort:{text:'TCP port for the local Palworld REST API. The control proxy expects 8212.',tags:['restart','network']},
+  LogFormatType:{text:'Server log format. Text is easiest to read in this panel; Json is better for machines.',tags:['restart']},
+  bIsUseBackupSaveData:{text:'Enables Palworld built-in backup save behavior.',tags:['restart']},
+  AutoSaveSpan:{text:'Seconds between autosaves. Lower saves more often but can cause small save hitches; higher risks losing more progress after a crash.',tags:['restart','performance']},
+  bAllowGlobalPalboxExport:{text:'Allows moving Pals into Global Palbox.',tags:['restart']},
+  bAllowGlobalPalboxImport:{text:'Allows bringing Pals from Global Palbox into this world. Leave off if you want server-only progression.',tags:['restart']},
+};
+const STARTUP_HELP = {
+  port:{text:'UDP port the server listens on. Router forwarding must match this. You are currently using 27015, with 27016 also exposed for Palworld companion traffic.',tags:['restart','network']},
+  players:{text:'Launch-time max player count. Keep this at 4 for your laptop to avoid wasting RAM/CPU.',tags:['restart','performance']},
+  NumberOfWorkerThreadsServer:{text:'Server worker thread count. 8 is reasonable for the Ryzen 5500U; too high can add overhead instead of speed.',tags:['restart','performance']},
+  logformat:{text:'Launch log format. Text is easiest for live troubleshooting.',tags:['restart']},
+  useperfthreads:{text:'Enables Palworld performance threads. Usually good for dedicated servers.',tags:['restart','performance']},
+  NoAsyncLoadingThread:{text:'Palworld startup/runtime threading flag used by the dedicated-server docs. Keep as-is unless testing a specific issue.',tags:['restart','performance']},
+  UseMultithreadForDS:{text:'Dedicated-server multithreading flag. Keep enabled for this CPU.',tags:['restart','performance']},
+  publiclobby:{text:'Lists the server publicly/community-style. Keep off for private friend servers.',tags:['restart','security']},
+  publicip:{text:'Public lobby IP override. Leave blank unless public listing needs a fixed advertised IP.',tags:['restart','network']},
+  publicport:{text:'Public lobby port override. Leave blank unless public listing needs an explicit port.',tags:['restart','network']},
+};
+function tagClass(t){return t==='restart'?'restart':t==='network'?'net':t==='security'?'sec':t==='performance'?'perf':t==='warn'?'warn':''}
+function defaultHelp(f){
+  const name = f.name || '';
+  if(/password/i.test(name)) return 'Sensitive value. Keep it private and restart after changing.';
+  if(f.type==='bool') return 'Toggle setting. Enabled means True, disabled means False. Most dedicated-server config toggles apply after restart.';
+  if(f.type==='number' || f.type==='int') return 'Numeric server setting. Values above or below the default can change balance or performance; restart after saving.';
+  if(f.type==='enum') return 'Preset/enum setting. Pick one of the allowed values; restart after saving.';
+  if(f.type==='raw') return 'Raw Palworld config value. Keep the exact parentheses/quotes format unless you know the internal IDs.';
+  return 'Text server setting. Changes usually apply after saving and restarting the server.';
+}
+function helpForField(f){
+  const extra = SETTING_HELP[f.name] || {};
+  const text = extra.text || f.description || defaultHelp(f);
+  const desc = f.description && f.description !== text ? f.description : '';
+  return {desc, text, tags:extra.tags || ['restart']};
+}
+function helpForLaunch(k,label){return STARTUP_HELP[k] || {text:label || 'Startup argument for Palworld dedicated server.',tags:['restart']}}
+function helpBlock(help){
+  const tags = (help.tags || []).map(t=>`<span class="tag ${tagClass(t)}">${esc(t)}</span>`).join('');
+  return `${help.desc?`<div class="desc">${esc(help.desc)}</div>`:''}<div class="help-text">${esc(help.text)}</div>${tags?`<div class="help-meta">${tags}</div>`:''}`;
+}
 
 function renderLogin(err=''){
   app.innerHTML = `<div class="login"><div class="card">
@@ -162,15 +286,17 @@ function render(){
 function fieldHtml(f){
   const id='f_'+f.name.replace(/[^a-z0-9_]/gi,'_');
   const value = f.value ?? '';
+  const help = helpForField(f);
+  const helpText = [help.desc, help.text, ...(help.tags||[])].filter(Boolean).join(' ').toLowerCase();
   let input='';
   if(f.type==='bool') input=`<div class="checkrow"><input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="checkbox" ${value?'checked':''}><span>${value?'Enabled':'Disabled'}</span></div>`;
   else if(f.type==='enum' && f.choices) input=`<select id="${id}" data-key="${esc(f.name)}" data-type="${f.type}">${f.choices.map(c=>`<option ${String(value)===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
   else if(f.type==='raw') input=`<textarea id="${id}" data-key="${esc(f.name)}" data-type="${f.type}">${esc(f.raw ?? value)}</textarea>`;
   else input=`<input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="${f.sensitive?'password':(f.type==='int'||f.type==='number')?'number':'text'}" step="${f.type==='int'?'1':'any'}" value="${esc(value)}">`;
-  return `<div class="field" data-name="${esc(f.name.toLowerCase())}" data-desc="${esc((f.description||'').toLowerCase())}">
+  return `<div class="field" data-name="${esc(f.name.toLowerCase())}" data-desc="${esc(helpText)}">
     <label><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="small">default: ${esc(f.defaultRaw || f.default)}</span></label>
     ${input}
-    <div class="desc">${esc(f.description || 'No description in current docs/default file.')}</div>
+    ${helpBlock(help)}
   </div>`;
 }
 
@@ -213,15 +339,18 @@ function renderSettings(){
     }
     const group=(state.settings.groups||[]).find(g=>g.name===state.group);
     let fields=group?group.fields:[];
-    if(q) fields=(state.settings.fields||[]).filter(f=>f.name.toLowerCase().includes(q)||(f.description||'').toLowerCase().includes(q));
+    if(q) fields=(state.settings.fields||[]).filter(f=>{
+      const h=helpForField(f);
+      return f.name.toLowerCase().includes(q)||(f.description||'').toLowerCase().includes(q)||(h.text||'').toLowerCase().includes(q)||(h.tags||[]).join(' ').includes(q);
+    });
     body.innerHTML = `<div class="form-grid">${fields.map(fieldHtml).join('')}</div>
       <div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveSettings">Save Settings</button><button class="btn restart" id="saveSettingsRestart">Save Settings + Restart</button></div>
       <p class="small">Most PalWorldSettings.ini changes require a server restart. Password fields are intentionally hidden but saved normally.</p>`;
     $('#saveSettings').onclick=()=>saveSettings(false); $('#saveSettingsRestart').onclick=()=>saveSettings(true);
   }
 }
-function launchField(k,label,type,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><input data-launch="${esc(k)}" type="${type}" value="${esc(val??'')}"><div class="desc">${esc(label)}</div></div>`}
-function launchCheck(k,label,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><div class="checkrow"><input data-launch="${esc(k)}" type="checkbox" ${val?'checked':''}><span>${esc(label)}</span></div></div>`}
+function launchField(k,label,type,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><input data-launch="${esc(k)}" type="${type}" value="${esc(val??'')}"><div class="desc">${esc(label)}</div>${helpBlock(helpForLaunch(k,label))}</div>`}
+function launchCheck(k,label,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><div class="checkrow"><input data-launch="${esc(k)}" type="checkbox" ${val?'checked':''}><span>${esc(label)}</span></div>${helpBlock(helpForLaunch(k,label))}</div>`}
 
 function readSettingInputs(){
   const out={};
