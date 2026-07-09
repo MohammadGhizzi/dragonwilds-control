@@ -387,7 +387,7 @@ async function saveLaunch(restart){try{const r=await req('/api/launch',{method:'
 async function action(act){if(act==='stop'&&!confirm('Stop the Palworld server?'))return; if(act==='update'&&!confirm('Pull image update and restart? Back up first if players made progress.'))return; try{const r=await req('/api/action',{method:'POST',body:JSON.stringify({action:act})}); if(!r.ok)throw new Error(r.err||r.error||'action failed'); toast(`${act} complete`); setTimeout(init,1200)}catch(e){toast(e.message,false)}}
 async function loadLogs(){try{const r=await req('/api/logs?n=220'); const box=$('#logs'); if(!box)return; box.innerHTML=(r.logs||'').split('\n').map(line=>`<span class="${/error|fail|fatal/i.test(line)?'err':/warn/i.test(line)?'warn':/REST API|Running|version/i.test(line)?'good':/Steam|port|player/i.test(line)?'net':''}">${esc(line)}</span>`).join('\n'); box.scrollTop=box.scrollHeight}catch(e){const box=$('#logs'); if(box)box.textContent=e.message}}
 async function init(){try{state.status=await req('/api/status'); state.settings=await req('/api/settings'); render()}catch(e){if(!TOKEN)renderLogin();else renderLogin(e.message)}}
-setInterval(async()=>{if(TOKEN&&document.visibilityState==='visible'){try{state.status=await req('/api/status'); render(); await loadLogs()}catch(e){console.warn(e)}}},5000);
+setInterval(async()=>{if(TOKEN&&document.visibilityState==='visible'){try{state.status=await req('/api/status'); await loadLogs()}catch(e){console.warn(e)}}},5000);
 init();
 </script>
 </body>
