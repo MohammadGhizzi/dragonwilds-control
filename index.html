@@ -311,6 +311,10 @@ function fieldHtml(f){
 
 function renderSettings(){
   const root=$('#settingsCard'); if(!root)return;
+  if(!canEditSettings() && !canEditStartup()){
+    root.remove();
+    return;
+  }
   if(!state.settings){root.innerHTML='<h2>Settings</h2><div class="small">Loading settings...</div>'; return}
   const groups=state.settings.groups || [];
   if(!state.group) state.group = 'Startup';
