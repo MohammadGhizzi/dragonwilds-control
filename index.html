@@ -90,6 +90,10 @@ async function req(path, opts={}){
   return data;
 }
 function tempClass(c){return c>=75?'hot':c>=65?'warn':c>=55?'mid':'ok'}
+function caps(){return state.status?.capabilities || state.settings?.capabilities || {actions:[],canEditSettings:false,canEditStartup:false,showTemperatures:false}}
+function canAction(a){return (caps().actions || []).includes(a)}
+function canEditSettings(){return !!caps().canEditSettings}
+function canEditStartup(){return !!caps().canEditStartup}
 
 const SETTING_HELP = {
   Difficulty:{text:'Preset name from Palworld. On dedicated servers, None is the normal default/custom ruleset; the real difficulty comes from the individual rate sliders below.',tags:['restart']},
@@ -233,6 +237,17 @@ function render(){
   const up = !!s.active;
   const players = s.players || [];
   const metrics = s.metrics || {};
+  const allowedActions = [
+    ['start','start','Start'],
+    ['stop','stop','Stop'],
+    ['restart','restart','Restart'],
+    ['save','save','Save World'],
+    ['backup','save','Backup Files'],
+    ['update','neutral','Update Image'],
+  ].filter(([act])=>canAction(act));
+  const tempCard = caps().showTemperatures ? `<section class="card span4"><h2>Temperatures</h2><div class="players">
+        ${(s.temps||[]).map(t=>`<span class="pill temp ${tempClass(t.c)}">${esc(t.label)} ${t.c}?C</span>`).join('') || '<span class="empty">No sensors</span>'}
+      </div></section>` : '';
   app.innerHTML = `<div class="wrap">
     <header>
       <div class="brand"><span class="dot ${up?'up':'down'}"></span><h1>Palworld Control</h1></div>
@@ -255,17 +270,10 @@ function render(){
         <div class="k">Disk</div><div class="v">${s.disk?`${fmtBytes(s.disk.free)} free (${s.disk.usedPct}% used)`:'-'}</div>
         <div class="k">Load</div><div class="v">${s.load?s.load.map(x=>x.toFixed(2)).join(' / '):'-'}</div>
       </div></section>
-      <section class="card span4"><h2>Temperatures</h2><div class="players">
-        ${(s.temps||[]).map(t=>`<span class="pill temp ${tempClass(t.c)}">${esc(t.label)} ${t.c}°C</span>`).join('') || '<span class="empty">No sensors</span>'}
-      </div></section>
+      ${tempCard}
       <section class="card span12"><h2>Actions</h2><div class="top-actions">
-        <button class="btn start" data-act="start">Start</button>
-        <button class="btn stop" data-act="stop">Stop</button>
-        <button class="btn restart" data-act="restart">Restart</button>
-        <button class="btn save" data-act="save">Save World</button>
-        <button class="btn save" data-act="backup">Backup Files</button>
-        <button class="btn neutral" data-act="update">Update Image</button>
-      </div><p class="small">Update pulls the current configured Docker image, then restarts the server.</p></section>
+        ${allowedActions.map(([act, cls, label])=>`<button class="btn ${cls}" data-act="${act}">${label}</button>`).join('') || '<span class="empty">Read only</span>'}
+      </div>${canAction('update')?'<p class="small">Update pulls the current configured Docker image, then restarts the server.</p>':'<p class="small">This token can only run the actions shown here. Everything else is read only.</p>'}</section>
       <section class="card span6"><h2>Players</h2><div class="players">
         ${players.length?players.map(p=>`<span class="pill">${esc(p.name||p.accountName||p.userId)} Lv.${esc(p.level ?? '?')} ${p.ping?`(${Math.round(p.ping)}ms)`:''}</span>`).join(''):'<span class="empty">No players online</span>'}
       </div></section>
@@ -288,11 +296,12 @@ function fieldHtml(f){
   const value = f.value ?? '';
   const help = helpForField(f);
   const helpText = [help.desc, help.text, ...(help.tags||[])].filter(Boolean).join(' ').toLowerCase();
+  const disabled = canEditSettings() ? '' : 'disabled';
   let input='';
-  if(f.type==='bool') input=`<div class="checkrow"><input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="checkbox" ${value?'checked':''}><span>${value?'Enabled':'Disabled'}</span></div>`;
-  else if(f.type==='enum' && f.choices) input=`<select id="${id}" data-key="${esc(f.name)}" data-type="${f.type}">${f.choices.map(c=>`<option ${String(value)===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
-  else if(f.type==='raw') input=`<textarea id="${id}" data-key="${esc(f.name)}" data-type="${f.type}">${esc(f.raw ?? value)}</textarea>`;
-  else input=`<input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="${f.sensitive?'password':(f.type==='int'||f.type==='number')?'number':'text'}" step="${f.type==='int'?'1':'any'}" value="${esc(value)}">`;
+  if(f.type==='bool') input=`<div class="checkrow"><input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="checkbox" ${value?'checked':''} ${disabled}><span>${value?'Enabled':'Disabled'}</span></div>`;
+  else if(f.type==='enum' && f.choices) input=`<select id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" ${disabled}>${f.choices.map(c=>`<option ${String(value)===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
+  else if(f.type==='raw') input=`<textarea id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" ${disabled}>${esc(f.raw ?? value)}</textarea>`;
+  else input=`<input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="${f.sensitive?'password':(f.type==='int'||f.type==='number')?'number':'text'}" step="${f.type==='int'?'1':'any'}" value="${esc(value)}" ${disabled}>`;
   return `<div class="field" data-name="${esc(f.name.toLowerCase())}" data-desc="${esc(helpText)}">
     <label><span class="name" title="${esc(f.name)}">${esc(f.name)}</span><span class="small">default: ${esc(f.defaultRaw || f.default)}</span></label>
     ${input}
@@ -333,9 +342,10 @@ function renderSettings(){
         ${launchCheck('publiclobby','Community server (-publiclobby)',launch.publiclobby)}
         ${launchField('publicip','Community public IP override','text',launch.publicip)}
         ${launchField('publicport','Community public port override','text',launch.publicport)}
-      </div><div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveLaunch">Save Startup</button><button class="btn restart" id="saveLaunchRestart">Save Startup + Restart</button></div>
+      </div>${canEditStartup()?'<div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveLaunch">Save Startup</button><button class="btn restart" id="saveLaunchRestart">Save Startup + Restart</button></div>':'<p class="small">Startup settings are read only for this token.</p>'}
       <p class="small">Changing the UDP port also requires matching the router forward and firewall. Current router should forward UDP 27015 to this laptop.</p>`;
-      $('#saveLaunch').onclick=()=>saveLaunch(false); $('#saveLaunchRestart').onclick=()=>saveLaunch(true); return;
+      if(canEditStartup()){ $('#saveLaunch').onclick=()=>saveLaunch(false); $('#saveLaunchRestart').onclick=()=>saveLaunch(true); }
+      return;
     }
     const group=(state.settings.groups||[]).find(g=>g.name===state.group);
     let fields=group?group.fields:[];
@@ -344,13 +354,13 @@ function renderSettings(){
       return f.name.toLowerCase().includes(q)||(f.description||'').toLowerCase().includes(q)||(h.text||'').toLowerCase().includes(q)||(h.tags||[]).join(' ').includes(q);
     });
     body.innerHTML = `<div class="form-grid">${fields.map(fieldHtml).join('')}</div>
-      <div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveSettings">Save Settings</button><button class="btn restart" id="saveSettingsRestart">Save Settings + Restart</button></div>
-      <p class="small">Most PalWorldSettings.ini changes require a server restart. Password fields are intentionally hidden but saved normally.</p>`;
-    $('#saveSettings').onclick=()=>saveSettings(false); $('#saveSettingsRestart').onclick=()=>saveSettings(true);
+      ${canEditSettings()?'<div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveSettings">Save Settings</button><button class="btn restart" id="saveSettingsRestart">Save Settings + Restart</button></div>':'<p class="small">Settings are read only for this token.</p>'}
+      <p class="small">Most PalWorldSettings.ini changes require a server restart. Password fields are intentionally hidden for limited tokens.</p>`;
+    if(canEditSettings()){ $('#saveSettings').onclick=()=>saveSettings(false); $('#saveSettingsRestart').onclick=()=>saveSettings(true); }
   }
 }
-function launchField(k,label,type,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><input data-launch="${esc(k)}" type="${type}" value="${esc(val??'')}"><div class="desc">${esc(label)}</div>${helpBlock(helpForLaunch(k,label))}</div>`}
-function launchCheck(k,label,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><div class="checkrow"><input data-launch="${esc(k)}" type="checkbox" ${val?'checked':''}><span>${esc(label)}</span></div>${helpBlock(helpForLaunch(k,label))}</div>`}
+function launchField(k,label,type,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><input data-launch="${esc(k)}" type="${type}" value="${esc(val??'')}" ${canEditStartup()?'':'disabled'}><div class="desc">${esc(label)}</div>${helpBlock(helpForLaunch(k,label))}</div>`}
+function launchCheck(k,label,val){return `<div class="field"><label><span class="name">${esc(k)}</span></label><div class="checkrow"><input data-launch="${esc(k)}" type="checkbox" ${val?'checked':''} ${canEditStartup()?'':'disabled'}><span>${esc(label)}</span></div>${helpBlock(helpForLaunch(k,label))}</div>`}
 
 function readSettingInputs(){
   const out={};
