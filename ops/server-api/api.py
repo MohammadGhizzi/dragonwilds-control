@@ -27,6 +27,8 @@ ADMIN_TOKEN_PATH = API_ROOT / "token"
 OPERATOR_TOKEN_PATH = API_ROOT / "token_operator"
 LOG_PATH = API_ROOT / "api.log"
 BACKUP_SCRIPT = ROOT / "scripts/backup.sh"
+IMAGE_REPOSITORY = "ghcr.io/pocketpairjp/palserver"
+FALLBACK_IMAGE = f"{IMAGE_REPOSITORY}:v1.0.0.100427"
 
 DEFAULT_LAUNCH = {
     "port": 27015,
@@ -423,9 +425,15 @@ def write_launch(data):
     if launch.get("logformat"):
         command.append(f"-logformat={launch['logformat']}")
     cmd_yaml = "\n".join(f"      - {arg}" for arg in command)
+    image_match = re.search(
+        rf"(?m)^\s*image:\s*({re.escape(IMAGE_REPOSITORY)}:[^\s#]+)",
+        read_text(COMPOSE_PATH),
+    )
+    image = image_match.group(1) if image_match else FALLBACK_IMAGE
+    secondary_port = launch["port"] + 1
     compose = f"""services:
   palworld-server:
-    image: ghcr.io/pocketpairjp/palserver:v0.7.3.90464
+    image: {image}
     container_name: palworld-server
     restart: unless-stopped
     entrypoint: /pal/helper.sh
@@ -433,6 +441,7 @@ def write_launch(data):
 {cmd_yaml}
     ports:
       - "{launch['port']}:{launch['port']}/udp"
+      - "{secondary_port}:{secondary_port}/udp"
       - "127.0.0.1:8212:8212/tcp"
     volumes:
       - ./helper.sh:/pal/helper.sh:ro
