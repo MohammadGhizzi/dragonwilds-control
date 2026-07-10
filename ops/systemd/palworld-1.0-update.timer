@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Palworld 1.0 updater once at 07:00
+
+[Timer]
+OnCalendar=2026-07-10 07:00:00 Asia/Riyadh
+Persistent=true
+AccuracySec=1s
+Unit=palworld-1.0-update.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=One-shot Palworld 1.0 image update and fresh world
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/moha/palworld
+ExecStart=/usr/bin/python3 /home/moha/palworld/scripts/one-shot-1.0-update.py
+StandardOutput=journal
+StandardError=journal
+
