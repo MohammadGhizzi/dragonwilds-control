@@ -52,6 +52,10 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background
 .field input:not([type=checkbox]),.field select,.field textarea{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 9px;min-width:0}
 .field textarea{height:70px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .checkrow{display:flex;align-items:center;gap:8px;padding:7px 0}
+.bool-state{font-weight:700;color:var(--muted)}
+.bool-state.enabled{color:var(--green)}
+.bool-state.disabled{color:#b7c4d5}
+.bool-state.dirty{color:var(--yellow)}
 .settings-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .search{min-width:260px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:7px;padding:8px 10px}
 .logs{height:320px;overflow:auto;white-space:pre;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#06090e;border:1px solid var(--line);border-radius:8px;padding:10px}
@@ -298,7 +302,7 @@ function fieldHtml(f){
   const helpText = [help.desc, help.text, ...(help.tags||[])].filter(Boolean).join(' ').toLowerCase();
   const disabled = canEditSettings() ? '' : 'disabled';
   let input='';
-  if(f.type==='bool') input=`<div class="checkrow"><input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="checkbox" ${value?'checked':''} ${disabled}><span>${value?'Enabled':'Disabled'}</span></div>`;
+  if(f.type==='bool') input=`<div class="checkrow"><input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" data-initial-checked="${value?'true':'false'}" type="checkbox" ${value?'checked':''} ${disabled}><span class="bool-state" data-bool-state aria-live="polite"></span></div>`;
   else if(f.type==='enum' && f.choices) input=`<select id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" ${disabled}>${f.choices.map(c=>`<option ${String(value)===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
   else if(f.type==='raw') input=`<textarea id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" ${disabled}>${esc(f.raw ?? value)}</textarea>`;
   else input=`<input id="${id}" data-key="${esc(f.name)}" data-type="${f.type}" type="${f.sensitive?'password':(f.type==='int'||f.type==='number')?'number':'text'}" step="${f.type==='int'?'1':'any'}" value="${esc(value)}" ${disabled}>`;
@@ -307,6 +311,24 @@ function fieldHtml(f){
     ${input}
     ${helpBlock(help)}
   </div>`;
+}
+
+function bindBooleanFields(root){
+  root.querySelectorAll('input[data-type="bool"]').forEach(input=>{
+    const label=input.closest('.checkrow')?.querySelector('[data-bool-state]');
+    if(!label)return;
+    const sync=()=>{
+      const enabled=input.checked;
+      const dirty=enabled!==(input.dataset.initialChecked==='true');
+      label.textContent=`Selected: ${enabled?'ENABLED (True)':'DISABLED (False)'}${dirty?' - NOT SAVED':''}`;
+      label.classList.toggle('enabled',enabled);
+      label.classList.toggle('disabled',!enabled);
+      label.classList.toggle('dirty',dirty);
+      input.setAttribute('aria-checked',String(enabled));
+    };
+    input.addEventListener('change',sync);
+    sync();
+  });
 }
 
 function renderSettings(){
@@ -360,6 +382,7 @@ function renderSettings(){
     body.innerHTML = `<div class="form-grid">${fields.map(fieldHtml).join('')}</div>
       ${canEditSettings()?'<div class="top-actions" style="margin-top:12px"><button class="btn save" id="saveSettings">Save Settings</button><button class="btn restart" id="saveSettingsRestart">Save Settings + Restart</button></div>':'<p class="small">Settings are read only for this token.</p>'}
       <p class="small">Most PalWorldSettings.ini changes require a server restart. Password fields are intentionally hidden for limited tokens.</p>`;
+    bindBooleanFields(body);
     if(canEditSettings()){ $('#saveSettings').onclick=()=>saveSettings(false); $('#saveSettingsRestart').onclick=()=>saveSettings(true); }
   }
 }
