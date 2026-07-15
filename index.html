@@ -76,6 +76,7 @@ const DEFAULT_API = 'https://moha-eos.tailb7a05f.ts.net';
 let API = localStorage.getItem('pal_api') || DEFAULT_API;
 let TOKEN = localStorage.getItem('pal_token') || '';
 let state = { status:null, settings:null, group:null, search:'' };
+let REQUEST_BUSY = false;
 const $ = (s, el=document) => el.querySelector(s);
 const app = $('#app');
 
@@ -83,6 +84,16 @@ function esc(v){return String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':
 function fmtBytes(n){if(!n && n!==0)return '-'; const u=['B','KB','MB','GB','TB']; let i=0,x=n; while(x>=1024&&i<u.length-1){x/=1024;i++} return `${x.toFixed(i?1:0)} ${u[i]}`}
 function fmtUptime(s){if(!s && s!==0)return '-'; s=Math.floor(s); const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h?`${h}h ${m}m`:`${m}m`}
 function toast(msg, ok=true){const t=document.createElement('div');t.className=`toast ${ok?'ok':'err'}`;t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3600)}
+function playerImpact(){const n=state.status?.players?.length||0;return n?` This will disconnect ${n} connected player${n===1?'':'s'}.`:''}
+async function runBusy(work){
+  if(REQUEST_BUSY)return;
+  REQUEST_BUSY=true;
+  const buttons=[...document.querySelectorAll('button')];
+  const disabled=buttons.map(b=>b.disabled);
+  buttons.forEach(b=>b.disabled=true);
+  try{await work()}
+  finally{REQUEST_BUSY=false;buttons.forEach((b,i)=>b.disabled=disabled[i])}
+}
 async function req(path, opts={}){
   const headers = opts.headers || {};
   if(TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
@@ -405,9 +416,23 @@ function readLaunchInputs(){
   });
   return out;
 }
-async function saveSettings(restart){try{const r=await req('/api/settings',{method:'POST',body:JSON.stringify({settings:readSettingInputs(),restart})}); state.settings=r.settings; toast(restart?'Settings saved and server restarting':'Settings saved'); await init()}catch(e){toast(e.message,false)}}
-async function saveLaunch(restart){try{const r=await req('/api/launch',{method:'POST',body:JSON.stringify({launch:readLaunchInputs(),restart})}); state.settings.launch=r.launch; toast(restart?'Startup saved and server restarting':'Startup saved'); await init()}catch(e){toast(e.message,false)}}
-async function action(act){if(act==='stop'&&!confirm('Stop the Palworld server?'))return; if(act==='update'&&!confirm('Pull image update and restart? Back up first if players made progress.'))return; try{const r=await req('/api/action',{method:'POST',body:JSON.stringify({action:act})}); if(!r.ok)throw new Error(r.err||r.error||'action failed'); toast(`${act} complete`); setTimeout(init,1200)}catch(e){toast(e.message,false)}}
+async function saveSettings(restart){
+  if(restart&&!confirm(`Save settings and restart Palworld?${playerImpact()}`))return;
+  await runBusy(async()=>{try{const r=await req('/api/settings',{method:'POST',body:JSON.stringify({settings:readSettingInputs(),restart})}); state.settings=r.settings; toast(restart?'Settings saved and server restarting':'Settings saved'); await init()}catch(e){toast(e.message,false)}});
+}
+async function saveLaunch(restart){
+  if(restart&&!confirm(`Save startup settings and restart Palworld?${playerImpact()}`))return;
+  await runBusy(async()=>{try{const r=await req('/api/launch',{method:'POST',body:JSON.stringify({launch:readLaunchInputs(),restart})}); state.settings.launch=r.launch; toast(restart?'Startup saved and server restarting':'Startup saved'); await init()}catch(e){toast(e.message,false)}});
+}
+async function action(act){
+  const prompts={
+    stop:`Stop Palworld?${playerImpact()}`,
+    restart:`Restart Palworld?${playerImpact()}`,
+    update:`Save, back up, pull the official latest image, and restart Palworld?${playerImpact()}`,
+  };
+  if(prompts[act]&&!confirm(prompts[act]))return;
+  await runBusy(async()=>{try{const r=await req('/api/action',{method:'POST',body:JSON.stringify({action:act})}); if(!r.ok)throw new Error(r.err||r.error||`Action failed during ${r.stage||'execution'}`); toast(`${act} complete`); setTimeout(init,1200)}catch(e){toast(e.message,false)}});
+}
 async function loadLogs(){try{const r=await req('/api/logs?n=220'); const box=$('#logs'); if(!box)return; box.innerHTML=(r.logs||'').split('\n').map(line=>`<span class="${/error|fail|fatal/i.test(line)?'err':/warn/i.test(line)?'warn':/REST API|Running|version/i.test(line)?'good':/Steam|port|player/i.test(line)?'net':''}">${esc(line)}</span>`).join('\n'); box.scrollTop=box.scrollHeight}catch(e){const box=$('#logs'); if(box)box.textContent=e.message}}
 async function init(){try{state.status=await req('/api/status'); state.settings=await req('/api/settings'); render()}catch(e){if(!TOKEN)renderLogin();else renderLogin(e.message)}}
 setInterval(async()=>{if(TOKEN&&document.visibilityState==='visible'){try{state.status=await req('/api/status'); await loadLogs()}catch(e){console.warn(e)}}},5000);

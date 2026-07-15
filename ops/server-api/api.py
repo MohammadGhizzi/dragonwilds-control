@@ -29,6 +29,7 @@ LOG_PATH = API_ROOT / "api.log"
 BACKUP_SCRIPT = ROOT / "scripts/backup.sh"
 IMAGE_REPOSITORY = "ghcr.io/pocketpairjp/palserver"
 FALLBACK_IMAGE = f"{IMAGE_REPOSITORY}:v1.0.0.100427"
+LATEST_IMAGE = f"{IMAGE_REPOSITORY}:latest"
 
 DEFAULT_LAUNCH = {
     "port": 27015,
@@ -523,6 +524,45 @@ def service_active():
     return p["out"].strip() == "active"
 
 
+def save_world():
+    return pal_rest("/save", method="POST", timeout=10)
+
+
+def backup_world():
+    save = None
+    if service_active():
+        save = save_world()
+        if not save.get("ok"):
+            return {"ok": False, "stage": "save", "save": save}
+    backup = run([str(BACKUP_SCRIPT)], timeout=120)
+    return {
+        "ok": backup["rc"] == 0,
+        "stage": "backup",
+        "save": save,
+        "backup": backup,
+    }
+
+
+def ensure_latest_image():
+    """Switch the managed Palworld service to the official latest image."""
+    content = read_text(COMPOSE_PATH)
+    pattern = rf"(?m)^(\s*image:\s*){re.escape(IMAGE_REPOSITORY)}:[^\s#]+(\s*(?:#.*)?$)"
+    match = re.search(pattern, content)
+    if not match:
+        return {"ok": False, "error": "Palworld image was not found in compose.yaml"}
+
+    previous = match.group(0).strip().split("#", 1)[0].strip().split()[-1]
+    updated = re.sub(pattern, rf"\1{LATEST_IMAGE}\2", content, count=1)
+    changed = updated != content
+    if changed:
+        config_backup_dir = ROOT / "backups/config"
+        config_backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(COMPOSE_PATH, config_backup_dir / f"compose-before-image-update-{stamp}.yaml")
+        COMPOSE_PATH.write_text(updated, encoding="utf-8")
+    return {"ok": True, "changed": changed, "previous": previous, "image": LATEST_IMAGE}
+
+
 def status_payload(role="admin"):
     players = pal_rest("/players")
     info = pal_rest("/info")
@@ -668,15 +708,23 @@ class Handler(BaseHTTPRequestHandler):
                 elif action == "restart":
                     p = run(["sudo", "-n", "/usr/bin/systemctl", "restart", "palworld.service"], timeout=120)
                 elif action == "backup":
-                    p = run([str(BACKUP_SCRIPT)], timeout=120)
+                    result = backup_world()
+                    return self.json(200, result)
                 elif action == "save":
-                    rest = pal_rest("/save", method="POST", timeout=10)
+                    rest = save_world()
                     return self.json(200, {"ok": rest.get("ok"), "result": rest})
                 elif action == "update":
-                    p1 = run(["sudo", "-n", "/usr/bin/systemctl", "stop", "palworld.service"], timeout=120)
-                    p2 = run(["docker", "compose", "pull"], timeout=1800)
-                    p3 = run(["sudo", "-n", "/usr/bin/systemctl", "start", "palworld.service"], timeout=120)
-                    return self.json(200, {"ok": p1["rc"] == p2["rc"] == p3["rc"] == 0, "steps": [p1, p2, p3]})
+                    preparation = backup_world()
+                    if not preparation.get("ok"):
+                        return self.json(200, {"ok": False, "stage": "preparation", "preparation": preparation})
+                    image = ensure_latest_image()
+                    if not image.get("ok"):
+                        return self.json(200, {"ok": False, "stage": "image", "preparation": preparation, "image": image})
+                    pull = run(["docker", "compose", "pull"], timeout=1800)
+                    if pull["rc"] != 0:
+                        return self.json(200, {"ok": False, "stage": "pull", "preparation": preparation, "image": image, "pull": pull})
+                    restart = run(["sudo", "-n", "/usr/bin/systemctl", "restart", "palworld.service"], timeout=120)
+                    return self.json(200, {"ok": restart["rc"] == 0, "preparation": preparation, "image": image, "pull": pull, "restart": restart})
                 else:
                     return self.json(400, {"ok": False, "error": "bad action"})
                 return self.json(200, {"ok": p["rc"] == 0, **p})
