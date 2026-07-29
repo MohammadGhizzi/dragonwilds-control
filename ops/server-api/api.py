@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -175,6 +176,8 @@ GROUP_ORDER = [
 ]
 
 rate = {}
+update_lock = threading.Lock()
+update_state = {"status": "idle", "startedAt": None, "finishedAt": None, "result": None}
 
 
 def ensure_token(path):
@@ -563,6 +566,68 @@ def ensure_latest_image():
     return {"ok": True, "changed": changed, "previous": previous, "image": LATEST_IMAGE}
 
 
+def perform_update():
+    preparation = backup_world()
+    if not preparation.get("ok"):
+        return {"ok": False, "stage": "preparation", "preparation": preparation}
+    image = ensure_latest_image()
+    if not image.get("ok"):
+        return {"ok": False, "stage": "image", "preparation": preparation, "image": image}
+    pull = run(["docker", "compose", "pull"], timeout=1800)
+    if pull["rc"] != 0:
+        return {
+            "ok": False,
+            "stage": "pull",
+            "preparation": preparation,
+            "image": image,
+            "pull": pull,
+        }
+    restart = run(["sudo", "-n", "/usr/bin/systemctl", "restart", "palworld.service"], timeout=120)
+    return {
+        "ok": restart["rc"] == 0,
+        "stage": "complete" if restart["rc"] == 0 else "restart",
+        "preparation": preparation,
+        "image": image,
+        "pull": pull,
+        "restart": restart,
+    }
+
+
+def get_update_state():
+    with update_lock:
+        return dict(update_state)
+
+
+def _run_update_job(workflow):
+    try:
+        result = workflow()
+    except Exception as e:
+        log(f"UPDATE ERROR {e}")
+        result = {"ok": False, "stage": "exception", "error": str(e)}
+    with update_lock:
+        update_state.update({
+            "status": "complete" if result.get("ok") else "failed",
+            "finishedAt": time.time(),
+            "result": result,
+        })
+
+
+def start_update_job(workflow=None):
+    workflow = workflow or perform_update
+    with update_lock:
+        if update_state["status"] == "running":
+            return {"ok": False, "status": "running", "error": "An update is already running"}
+        started_at = time.time()
+        update_state.update({
+            "status": "running",
+            "startedAt": started_at,
+            "finishedAt": None,
+            "result": None,
+        })
+    threading.Thread(target=_run_update_job, args=(workflow,), daemon=True).start()
+    return {"ok": True, "status": "running", "startedAt": started_at}
+
+
 def status_payload(role="admin"):
     players = pal_rest("/players")
     info = pal_rest("/info")
@@ -676,6 +741,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, {"ok": True, "service": "palctl"})
             if self.path == "/api/status":
                 return self.json(200, status_payload(getattr(self, "role", "operator")))
+            if self.path == "/api/update-status":
+                if not self.require_admin():
+                    return
+                return self.json(200, {"ok": True, **get_update_state()})
             if self.path.startswith("/api/logs"):
                 n = 200
                 m = re.search(r"[?&]n=(\d+)", self.path)
@@ -714,17 +783,8 @@ class Handler(BaseHTTPRequestHandler):
                     rest = save_world()
                     return self.json(200, {"ok": rest.get("ok"), "result": rest})
                 elif action == "update":
-                    preparation = backup_world()
-                    if not preparation.get("ok"):
-                        return self.json(200, {"ok": False, "stage": "preparation", "preparation": preparation})
-                    image = ensure_latest_image()
-                    if not image.get("ok"):
-                        return self.json(200, {"ok": False, "stage": "image", "preparation": preparation, "image": image})
-                    pull = run(["docker", "compose", "pull"], timeout=1800)
-                    if pull["rc"] != 0:
-                        return self.json(200, {"ok": False, "stage": "pull", "preparation": preparation, "image": image, "pull": pull})
-                    restart = run(["sudo", "-n", "/usr/bin/systemctl", "restart", "palworld.service"], timeout=120)
-                    return self.json(200, {"ok": restart["rc"] == 0, "preparation": preparation, "image": image, "pull": pull, "restart": restart})
+                    started = start_update_job()
+                    return self.json(202 if started["ok"] else 409, started)
                 else:
                     return self.json(400, {"ok": False, "error": "bad action"})
                 return self.json(200, {"ok": p["rc"] == 0, **p})
